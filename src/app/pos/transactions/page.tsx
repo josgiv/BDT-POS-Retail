@@ -28,6 +28,7 @@ export default function TransactionsPage() {
     }, []);
 
     const loadTransactions = async () => {
+
         try {
             const data = await getTransactionsAction();
             setTransactions(data);

@@ -50,6 +50,7 @@ export interface Transaction {
     created_at: string;
     synced: boolean;
     user_email?: string; // Added for lookup
+    username?: string; // Added for lookup (fallback if email fails or for local users)
 }
 
 export interface Shift {

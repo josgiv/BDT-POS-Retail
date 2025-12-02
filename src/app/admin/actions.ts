@@ -135,7 +135,12 @@ export async function getGlobalTransactionDetailsAction(transactionUuid: string)
         `, [transactionUuid]);
 
         return rows;
-    } catch (error) {
+    } catch (error: any) {
+        // Handle missing table error gracefully as requested
+        if (error.code === 'ER_NO_SUCH_TABLE') {
+            console.warn('Table consolidated_transaction_items missing, returning empty details.');
+            return [];
+        }
         console.error('Failed to fetch global transaction details:', error);
         return [];
     }

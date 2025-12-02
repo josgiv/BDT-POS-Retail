@@ -13,7 +13,7 @@ interface TransactionDetailModalProps {
 }
 
 export function TransactionDetailModal({ isOpen, onClose, transaction, items }: TransactionDetailModalProps) {
-    if (!transaction) return null;
+    if (!isOpen || !transaction) return null;
 
     const formatRupiah = (val: number) => new Intl.NumberFormat('id-ID').format(val);
 

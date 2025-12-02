@@ -29,15 +29,16 @@ export default function AdminTransactionsClient({ initialTransactions }: AdminTr
 
     const handleViewDetails = async (trx: any) => {
         setSelectedTransaction(trx);
-        // For global transactions, we might not have items in the initial fetch.
-        // We need a server action to fetch global items.
-        // For now, let's assume we can fetch or it's passed.
-        // If it's global data, we need to fetch from consolidated_items.
-
-        // TODO: Implement getGlobalTransactionDetailsAction
-        // For now, open modal with empty items or try to fetch if local
-        setDetails([]);
         setIsModalOpen(true);
+        setDetails([]); // Reset details while loading
+
+        try {
+            // Fetch details from server action
+            const items = await getTransactionDetailsAction(trx.transaction_uuid, trx.branch_id);
+            setDetails(items);
+        } catch (error) {
+            console.error("Failed to fetch transaction details:", error);
+        }
     };
 
     return (

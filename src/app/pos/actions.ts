@@ -4,26 +4,39 @@ import { localDb } from '@/lib/db';
 import { Product, Transaction } from '@/types';
 import { syncTransactionToCloudAction, markTransactionSyncedAction } from '@/app/sync/actions';
 
-export async function getProductsAction(): Promise<Product[]> {
+// Helper to determine schema based on branch ID
+function getSchemaForBranch(branchId: string | number): string {
+    const id = String(branchId);
+    switch (id) {
+        case '101': return 'retail_jakarta';
+        case '102': return 'retail_bandung';
+        case '103': return 'retail_surabaya';
+        default: return 'retail_jakarta'; // Fallback or throw error
+    }
+}
+
+export async function getProductsAction(branchId: string = '101'): Promise<Product[]> {
     const client = await localDb.connect();
+    const schema = getSchemaForBranch(branchId);
     try {
-        const res = await client.query('SELECT * FROM products_local');
+        const res = await client.query(`SELECT * FROM ${schema}.products_local`);
         return res.rows;
     } catch (error) {
-        console.error('Error fetching products:', error);
+        console.error(`Error fetching products from ${schema}:`, error);
         return [];
     } finally {
         client.release();
     }
 }
 
-export async function getProductByBarcodeAction(barcode: string): Promise<Product | undefined> {
+export async function getProductByBarcodeAction(barcode: string, branchId: string = '101'): Promise<Product | undefined> {
     const client = await localDb.connect();
+    const schema = getSchemaForBranch(branchId);
     try {
-        const res = await client.query('SELECT * FROM products_local WHERE barcode = $1', [barcode]);
+        const res = await client.query(`SELECT * FROM ${schema}.products_local WHERE barcode = $1`, [barcode]);
         return res.rows[0];
     } catch (error) {
-        console.error('Error fetching product by barcode:', error);
+        console.error(`Error fetching product by barcode from ${schema}:`, error);
         return undefined;
     } finally {
         client.release();
@@ -32,49 +45,70 @@ export async function getProductByBarcodeAction(barcode: string): Promise<Produc
 
 export async function saveTransactionAction(transaction: Transaction): Promise<boolean> {
     const client = await localDb.connect();
+    const schema = getSchemaForBranch(transaction.branch_id);
+
     try {
         await client.query('BEGIN');
 
-        // 1. Lookup User ID if email is provided
+        // 1. Lookup User ID
         let userId = transaction.user_id;
-        if (!userId && transaction.user_email) {
-            const userRes = await client.query('SELECT user_id FROM users_local WHERE email = $1', [transaction.user_email]);
+
+        // Try looking up by username first (more reliable for local users)
+        if (!userId && transaction.username) {
+            const userRes = await client.query(`SELECT user_id FROM ${schema}.users_local WHERE username = $1`, [transaction.username]);
             if (userRes.rows.length > 0) {
                 userId = userRes.rows[0].user_id;
-            } else {
-                // Optional: Insert dummy user or handle error. For now, log warning.
-                console.warn(`User with email ${transaction.user_email} not found in users_local.`);
             }
+        }
+
+        // Fallback to email if username didn't work
+        if (!userId && transaction.user_email) {
+            // Note: users_local might be in the specific schema or public. 
+            // Assuming users are replicated to each branch schema or in a shared schema.
+            // If users are global, they might be in public.users_local? 
+            // Let's assume they are in the branch schema for now as per "distributed" nature.
+            try {
+                await client.query('SAVEPOINT email_lookup');
+                const userRes = await client.query(`SELECT user_id FROM ${schema}.users_local WHERE email = $1`, [transaction.user_email]);
+                if (userRes.rows.length > 0) {
+                    userId = userRes.rows[0].user_id;
+                }
+                await client.query('RELEASE SAVEPOINT email_lookup');
+            } catch (e) {
+                await client.query('ROLLBACK TO SAVEPOINT email_lookup');
+                console.warn(`Could not lookup user by email in ${schema}.users_local (column might be missing):`, e);
+            }
+        }
+
+        if (!userId && (transaction.username || transaction.user_email)) {
+            console.warn(`User ${transaction.username || transaction.user_email} not found in ${schema}.users_local.`);
         }
 
         // 2. Insert Transaction Header
         await client.query(
-            `INSERT INTO retail_jakarta.transactions 
+            `INSERT INTO ${schema}.transactions 
             (transaction_uuid, branch_id, shift_id, user_id, subtotal, total_discount, tax_amount, grand_total, payment_method, created_at, synced)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
             [
                 transaction.transaction_uuid,
                 transaction.branch_id,
-                null, // Shift ID handled separately or nullable
-                userId, // Use looked-up User ID
+                null,
+                userId,
                 transaction.subtotal,
                 transaction.total_discount,
                 transaction.tax_amount,
                 transaction.grand_total,
                 transaction.payment_method,
                 transaction.created_at,
-                false // synced
+                false
             ]
         );
 
         // 3. Insert Items
         for (const item of transaction.items) {
-            // Ensure product exists in local DB to avoid FK error or "Unknown Product"
-            // We try to update the name if it exists, or insert if missing (though addProductAction should handle this)
-            // For robustness, we can update the product name here if we have it from the cart
             if (item.name) {
                 await client.query(
-                    `INSERT INTO retail_jakarta.products_local (product_id, barcode, name, price, category)
+                    `INSERT INTO ${schema}.products_local (product_id, barcode, name, price, category)
                      VALUES ($1, $2, $3, $4, 'Uncategorized')
                      ON CONFLICT (product_id) DO UPDATE SET name = $3`,
                     [item.product_id, item.barcode, item.name, item.price]
@@ -82,7 +116,7 @@ export async function saveTransactionAction(transaction: Transaction): Promise<b
             }
 
             await client.query(
-                `INSERT INTO retail_jakarta.transaction_items (transaction_uuid, product_id, qty, price_at_sale, subtotal)
+                `INSERT INTO ${schema}.transaction_items (transaction_uuid, product_id, qty, price_at_sale, subtotal)
                 VALUES ($1, $2, $3, $4, $5)`,
                 [
                     transaction.transaction_uuid,
@@ -95,17 +129,16 @@ export async function saveTransactionAction(transaction: Transaction): Promise<b
 
             // 4. Update Stock (Inventory Only)
             await client.query(
-                `UPDATE retail_jakarta.inventory_local SET qty_on_hand = qty_on_hand - $1 WHERE product_id = $2`,
+                `UPDATE ${schema}.inventory_local SET qty_on_hand = qty_on_hand - $1 WHERE product_id = $2`,
                 [item.qty, item.product_id]
             );
         }
 
-        // 5. Insert into Upload Queue (For Sync to Cloud)
-        // We need to pass the updated transaction object with the correct user_id to the sync queue
+        // 5. Insert into Upload Queue
         const transactionToSync = { ...transaction, user_id: userId };
 
         await client.query(
-            `INSERT INTO retail_jakarta.upload_queue (table_name, record_uuid, operation, payload, status)
+            `INSERT INTO ${schema}.upload_queue (table_name, record_uuid, operation, payload, status)
             VALUES ($1, $2, $3, $4, $5)`,
             [
                 'transactions',
@@ -135,56 +168,59 @@ export async function saveTransactionAction(transaction: Transaction): Promise<b
         return true;
     } catch (error) {
         await client.query('ROLLBACK');
-        console.error('Error saving transaction:', error);
+        console.error(`Error saving transaction to ${schema}:`, error);
         throw error;
     } finally {
         client.release();
     }
 }
 
-export async function getTransactionDetailsAction(transactionUuid: string): Promise<any[]> {
+export async function getTransactionDetailsAction(transactionUuid: string, branchId: string = '101'): Promise<any[]> {
     const client = await localDb.connect();
+    const schema = getSchemaForBranch(branchId);
     try {
         const res = await client.query(`
             SELECT 
                 ti.*,
                 p.name as product_name,
                 p.category
-            FROM retail_jakarta.transaction_items ti
-            LEFT JOIN retail_jakarta.products_local p ON ti.product_id = p.product_id
+            FROM ${schema}.transaction_items ti
+            LEFT JOIN ${schema}.products_local p ON ti.product_id = p.product_id
             WHERE ti.transaction_uuid = $1
         `, [transactionUuid]);
         return res.rows;
     } catch (error) {
-        console.error('Error fetching transaction details:', error);
+        console.error(`Error fetching transaction details from ${schema}:`, error);
         return [];
     } finally {
         client.release();
     }
 }
 
-export async function getTransactionsAction(): Promise<any[]> {
+export async function getTransactionsAction(branchId: string = '101'): Promise<any[]> {
     const client = await localDb.connect();
+    const schema = getSchemaForBranch(branchId);
     try {
         const res = await client.query(`
-            SELECT * FROM retail_jakarta.transactions 
+            SELECT * FROM ${schema}.transactions 
             ORDER BY created_at DESC 
             LIMIT 100
         `);
         return res.rows;
     } catch (error) {
-        console.error('Error fetching transactions:', error);
+        console.error(`Error fetching transactions from ${schema}:`, error);
         return [];
     } finally {
         client.release();
     }
 }
 
-export async function addProductAction(product: Product): Promise<boolean> {
+export async function addProductAction(product: Product, branchId: string = '101'): Promise<boolean> {
     const client = await localDb.connect();
+    const schema = getSchemaForBranch(branchId);
     try {
         await client.query(
-            `INSERT INTO products_local (product_id, barcode, name, price, category)
+            `INSERT INTO ${schema}.products_local (product_id, barcode, name, price, category)
             VALUES ($1, $2, $3, $4, $6)
             ON CONFLICT (barcode) DO UPDATE 
             SET price = $4, name = $3, category = $6`,
@@ -193,29 +229,30 @@ export async function addProductAction(product: Product): Promise<boolean> {
                 product.barcode,
                 product.name,
                 product.price,
-                product.stock, // Not used in insert if table doesn't have stock column, but let's keep for now
+                product.stock,
                 product.category
             ]
         );
         return true;
     } catch (error) {
-        console.error('Error adding product:', error);
+        console.error(`Error adding product to ${schema}:`, error);
         return false;
     } finally {
         client.release();
     }
 }
 
-export async function logDefectiveAction(barcode: string, qty: number, reason: string): Promise<boolean> {
+export async function logDefectiveAction(barcode: string, qty: number, reason: string, branchId: string = '101'): Promise<boolean> {
     const client = await localDb.connect();
+    const schema = getSchemaForBranch(branchId);
     try {
         await client.query('BEGIN');
 
         // 1. Reduce Stock (Inventory Local)
         const res = await client.query(
-            `UPDATE inventory_local i
+            `UPDATE ${schema}.inventory_local i
              SET qty_on_hand = qty_on_hand - $1 
-             FROM products_local p
+             FROM ${schema}.products_local p
              WHERE i.product_id = p.product_id AND p.barcode = $2 
              RETURNING p.product_id, p.name`,
             [qty, barcode]
@@ -229,7 +266,7 @@ export async function logDefectiveAction(barcode: string, qty: number, reason: s
 
         // 2. Log Defective
         await client.query(`
-            CREATE TABLE IF NOT EXISTS defective_log (
+            CREATE TABLE IF NOT EXISTS ${schema}.defective_log (
                 id SERIAL PRIMARY KEY,
                 product_id INT,
                 name VARCHAR(255),
@@ -240,7 +277,7 @@ export async function logDefectiveAction(barcode: string, qty: number, reason: s
         `);
 
         await client.query(
-            `INSERT INTO defective_log (product_id, name, qty, reason) VALUES ($1, $2, $3, $4)`,
+            `INSERT INTO ${schema}.defective_log (product_id, name, qty, reason) VALUES ($1, $2, $3, $4)`,
             [product.product_id, product.name, qty, reason]
         );
 
@@ -248,7 +285,7 @@ export async function logDefectiveAction(barcode: string, qty: number, reason: s
         return true;
     } catch (error) {
         await client.query('ROLLBACK');
-        console.error('Error logging defective item:', error);
+        console.error(`Error logging defective item in ${schema}:`, error);
         return false;
     } finally {
         client.release();

@@ -31,6 +31,23 @@ export async function loginAction(formData: FormData) {
         return { error: "Invalid PIN" };
     }
 
+    // Verify Branch
+    const selectedBranch = formData.get("branch") as string;
+    if (!selectedBranch) {
+        return { error: "Please select a branch" };
+    }
+
+    // Special case for HQ/Admin
+    if (user.role === 'SUPER_ADMIN' || user.role === 'AREA_MANAGER') {
+        // Admins can access any branch or HQ
+    } else {
+        // Cashiers/Store Leaders must match their assigned branch
+        if (user.branchId && user.branchId.toString() !== selectedBranch) {
+            console.log(`[Login] Branch mismatch. User: ${user.branchId}, Selected: ${selectedBranch}`);
+            return { error: `Access Denied: You are not assigned to Branch ${selectedBranch}` };
+        }
+    }
+
     // Check access permission
     if (loginType === 'admin' && !user.canAccessDashboard) {
         console.log('[Login] User cannot access dashboard');

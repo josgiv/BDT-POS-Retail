@@ -41,7 +41,8 @@ export function CheckoutPanel({ user }: CheckoutPanelProps) {
             items: items,
             created_at: new Date().toISOString(),
             synced: false,
-            user_email: user.email // Pass email for server-side lookup
+            user_email: user.email, // Pass email for server-side lookup
+            username: user.username // Pass username as primary lookup
         };
 
         try {

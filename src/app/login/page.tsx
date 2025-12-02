@@ -9,6 +9,7 @@ import { useState } from "react";
 import { Lock, User, ShieldCheck, ShoppingCart } from "lucide-react";
 import { loginAction } from "./actions";
 import { toast } from "sonner";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function LoginPage() {
     const [loading, setLoading] = useState(false);
@@ -125,6 +126,21 @@ export default function LoginPage() {
                                 >
                                     Change
                                 </Button>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label className="text-sm font-medium text-neutral-600 uppercase tracking-wider">Select Branch</Label>
+                                <Select name="branch" required>
+                                    <SelectTrigger className="w-full h-14 text-lg bg-neutral-50 border-neutral-200 focus:ring-orange-400/20 rounded-xl">
+                                        <SelectValue placeholder="Choose Location..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="101">Jakarta Timur (JKT-001)</SelectItem>
+                                        <SelectItem value="102">Bandung Kota (BDG-001)</SelectItem>
+                                        <SelectItem value="103">Surabaya Pusat (SBY-001)</SelectItem>
+                                        <SelectItem value="HQ">Global HQ (Cloud)</SelectItem>
+                                    </SelectContent>
+                                </Select>
                             </div>
 
                             <div className="space-y-2">

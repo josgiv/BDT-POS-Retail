@@ -53,7 +53,17 @@ export function CartList() {
                             >
                                 <Minus className="h-3 w-3" />
                             </Button>
-                            <span className="w-8 text-center font-bold text-sm">{item.qty}</span>
+                            <input
+                                type="number"
+                                className="w-12 text-center font-bold text-sm border rounded py-1 mx-1"
+                                value={item.qty}
+                                onChange={(e) => {
+                                    const val = parseInt(e.target.value);
+                                    if (!isNaN(val) && val > 0) {
+                                        updateQty(item.product_id, val);
+                                    }
+                                }}
+                            />
                             <Button
                                 variant="outline"
                                 size="icon"

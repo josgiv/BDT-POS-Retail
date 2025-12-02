@@ -32,6 +32,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/utils/supabase/client';
+import { Sheet, SheetContent, SheetTrigger } from "../ui/sheet";
 
 interface AdminLayoutProps {
     children: React.ReactNode;
@@ -41,6 +42,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     const pathname = usePathname();
     const router = useRouter();
     const [isSidebarOpen, setIsSidebarOpen] = React.useState(true);
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
     const [userEmail, setUserEmail] = React.useState('');
     const [userRegion, setUserRegion] = React.useState('National');
 
@@ -66,25 +68,68 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         { title: 'Product Master', icon: Package, href: '/admin/products' },
         { title: 'Branch Management', icon: Store, href: '/admin/branches' },
         { title: 'Employees', icon: Users, href: '/admin/employees' },
-        { title: 'System Health', icon: Activity, href: '/admin/health' },
+        { title: 'System Health', icon: Activity, href: '/admin/system-health' },
     ];
+
+    const SidebarContent = () => (
+        <div className="flex flex-col h-full bg-neutral-900 text-white">
+            <div className="h-16 flex items-center justify-center border-b border-neutral-800">
+                <div className="flex items-center gap-2 font-bold text-xl tracking-tight">
+                    <span className="text-yellow-400">BAHLIL</span>MART
+                </div>
+            </div>
+
+            <nav className="flex-1 py-6 px-3 space-y-1">
+                {menuItems.map((item) => (
+                    <Link
+                        key={item.href}
+                        href={item.href}
+                        className={cn(
+                            "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-sm font-medium",
+                            pathname === item.href
+                                ? "bg-yellow-500 text-neutral-900"
+                                : "text-neutral-400 hover:bg-neutral-800 hover:text-white"
+                        )}
+                    >
+                        <item.icon className="h-5 w-5 shrink-0" />
+                        <span>{item.title}</span>
+                    </Link>
+                ))}
+            </nav>
+
+            <div className="p-4 border-t border-neutral-800">
+                <Button
+                    variant="ghost"
+                    onClick={async () => {
+                        const supabase = createClient();
+                        await supabase.auth.signOut();
+                        window.location.href = '/login'; // Hard reload
+                    }}
+                    className="w-full justify-start text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                >
+                    <LogOut className="h-5 w-5" />
+                    <span className="ml-3">Logout</span>
+                </Button>
+            </div>
+        </div>
+    );
 
     return (
         <div className="min-h-screen bg-neutral-100 flex">
-            {/* Sidebar */}
+            {/* Desktop Sidebar */}
             <aside
                 className={cn(
-                    "bg-neutral-900 text-white transition-all duration-300 flex flex-col fixed h-full z-20",
+                    "bg-neutral-900 text-white transition-all duration-300 hidden md:flex flex-col fixed h-full z-20",
                     isSidebarOpen ? "w-64" : "w-20"
                 )}
             >
                 <div className="h-16 flex items-center justify-center border-b border-neutral-800">
                     {isSidebarOpen ? (
                         <div className="flex items-center gap-2 font-bold text-xl tracking-tight">
-                            <span className="text-yellow-400">ALFA</span>HQ
+                            <span className="text-yellow-400">BAHLIL</span>MART
                         </div>
                     ) : (
-                        <span className="text-yellow-400 font-bold">AHQ</span>
+                        <span className="text-yellow-400 font-bold">BM</span>
                     )}
                 </div>
 
@@ -112,8 +157,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                         onClick={async () => {
                             const supabase = createClient();
                             await supabase.auth.signOut();
-                            router.push('/login');
-                            router.refresh();
+                            window.location.href = '/login'; // Hard reload to clear state
                         }}
                         className={cn(
                             "w-full justify-start text-red-400 hover:text-red-300 hover:bg-red-900/20",
@@ -127,11 +171,24 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             </aside>
 
             {/* Main Content */}
-            <div className={cn("flex-1 flex flex-col transition-all duration-300", isSidebarOpen ? "ml-64" : "ml-20")}>
+            <div className={cn("flex-1 flex flex-col transition-all duration-300", isSidebarOpen ? "md:ml-64" : "md:ml-20")}>
                 {/* Top Navbar */}
-                <header className="h-16 bg-white border-b px-6 flex items-center justify-between sticky top-0 z-10 shadow-sm">
+                <header className="h-16 bg-white border-b px-4 md:px-6 flex items-center justify-between sticky top-0 z-10 shadow-sm">
                     <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="icon" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
+                        {/* Mobile Menu Trigger */}
+                        <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+                            <SheetTrigger asChild>
+                                <Button variant="ghost" size="icon" className="md:hidden">
+                                    <Menu className="h-5 w-5" />
+                                </Button>
+                            </SheetTrigger>
+                            <SheetContent side="left" className="p-0 w-64 bg-neutral-900 border-r-neutral-800">
+                                <SidebarContent />
+                            </SheetContent>
+                        </Sheet>
+
+                        {/* Desktop Sidebar Toggle */}
+                        <Button variant="ghost" size="icon" onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="hidden md:flex">
                             <Menu className="h-5 w-5" />
                         </Button>
 
@@ -145,7 +202,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 md:gap-4">
                         {/* Global Context Filter */}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -174,9 +231,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" className="pl-2 pr-4 gap-3 rounded-full hover:bg-neutral-100">
-                                    <Avatar className="h-8 w-8 border">
-                                        <AvatarImage src="/avatar-placeholder.png" />
-                                        <AvatarFallback>AD</AvatarFallback>
+                                    <Avatar className="h-8 w-8 border bg-orange-100 text-orange-700">
+                                        <AvatarFallback><Users className="h-4 w-4" /></AvatarFallback>
                                     </Avatar>
                                     <div className="text-left hidden md:block">
                                         <div className="text-sm font-semibold">Admin Pusat</div>
@@ -187,7 +243,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                             <DropdownMenuContent align="end">
                                 <DropdownMenuLabel>My Account</DropdownMenuLabel>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem>Profile</DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                    <Link href="/admin/profile" className="w-full cursor-pointer">Profile</Link>
+                                </DropdownMenuItem>
                                 <DropdownMenuItem>Settings</DropdownMenuItem>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem className="text-red-600">Logout</DropdownMenuItem>
@@ -197,7 +255,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 </header>
 
                 {/* Page Content */}
-                <main className="p-6">
+                <main className="p-4 md:p-6">
                     {children}
                 </main>
             </div>

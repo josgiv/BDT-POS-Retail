@@ -55,31 +55,16 @@ export default function DashboardClient({ data }: DashboardClientProps) {
 
     const formatRupiah = (amount: number) => new Intl.NumberFormat('id-ID').format(Math.round(amount));
 
-    // Mock data for charts if not provided (or enhance getDashboardData to provide it)
-    // For now, let's generate some dummy data based on the totals if real data isn't passed
-    const salesData = [
-        { name: 'Mon', total: data.sales.total * 0.1 },
-        { name: 'Tue', total: data.sales.total * 0.2 },
-        { name: 'Wed', total: data.sales.total * 0.15 },
-        { name: 'Thu', total: data.sales.total * 0.25 },
-        { name: 'Fri', total: data.sales.total * 0.3 },
-        { name: 'Sat', total: data.sales.total * 0.4 },
-        { name: 'Sun', total: data.sales.total * 0.1 },
-    ];
-
-    const branchData = [
-        { name: 'Jakarta', value: 400 },
-        { name: 'Bandung', value: 300 },
-        { name: 'Surabaya', value: 300 },
-        { name: 'Bali', value: 200 },
-    ];
+    // Use real data if available, otherwise fallback to empty array to avoid errors
+    const salesData = data.chartData || [];
+    const branchData = data.branchPerformance || [];
 
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
                     <h2 className="text-3xl font-bold tracking-tight text-neutral-900">
-                        {data.role === 'AREA_MANAGER' || data.role === 'SUPER_ADMIN' ? 'HQ Command Center' : 'Store Dashboard'}
+                        {data.role === 'AREA_MANAGER' || data.role === 'SUPER_ADMIN' ? 'BahlilMart HQ Command Center' : 'Store Dashboard'}
                     </h2>
                     <p className="text-neutral-500">
                         Welcome back, <strong className="text-orange-600">{data.username}</strong> •
@@ -154,7 +139,7 @@ export default function DashboardClient({ data }: DashboardClientProps) {
                         <CardDescription>Daily revenue performance</CardDescription>
                     </CardHeader>
                     <CardContent className="pl-2">
-                        <div className="h-[300px]">
+                        <div className="w-full h-[300px]" style={{ minHeight: '300px' }}>
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={salesData}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -176,7 +161,7 @@ export default function DashboardClient({ data }: DashboardClientProps) {
                         <CardDescription>Revenue distribution by region</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="h-[300px]">
+                        <div className="w-full h-[300px]" style={{ minHeight: '300px' }}>
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
                                     <Pie
@@ -188,7 +173,7 @@ export default function DashboardClient({ data }: DashboardClientProps) {
                                         paddingAngle={5}
                                         dataKey="value"
                                     >
-                                        {branchData.map((entry, index) => (
+                                        {branchData.map((entry: any, index: number) => (
                                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                         ))}
                                     </Pie>

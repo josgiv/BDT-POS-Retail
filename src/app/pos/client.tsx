@@ -50,7 +50,7 @@ export default function PosClient({ user }: PosClientProps) {
                     <Button variant="ghost" size="icon" className="text-neutral-500">
                         <Menu className="h-6 w-6" />
                     </Button>
-                    <h1 className="text-xl font-bold text-blue-600 tracking-tight">Alfamart POS</h1>
+                    <h1 className="text-xl font-bold text-blue-600 tracking-tight">BahliMart POS</h1>
                 </div>
 
                 <div className="flex items-center gap-4">
@@ -100,7 +100,7 @@ export default function PosClient({ user }: PosClientProps) {
                         {/* Scanner Section */}
                         <div className="col-span-4 bg-white p-4 rounded-xl shadow-sm border flex flex-col">
                             <h3 className="font-semibold mb-2 text-neutral-700 text-sm">Scan Barcode</h3>
-                            <div className="flex-1 bg-black rounded-lg overflow-hidden relative">
+                            <div className="flex-1 bg-neutral-100 rounded-lg overflow-hidden relative flex items-center justify-center">
                                 <BarcodeScanner />
                             </div>
                         </div>

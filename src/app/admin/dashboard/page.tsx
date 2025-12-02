@@ -12,6 +12,8 @@ interface DashboardData {
     activeShift: { full_name: string; start_time: string } | null;
     username: string;
     recentTransactions: any[];
+    chartData?: any[];
+    branchPerformance?: any[];
 }
 
 type DashboardResult = DashboardData | { redirect: string };
@@ -31,6 +33,8 @@ async function getDashboardData(): Promise<DashboardResult | null> {
         return { redirect: '/pos' };
     }
 
+    const { getSalesChartData, getBranchPerformance } = await import('../actions');
+
     let dashboardData: DashboardData = {
         role: userData.role,
         source: 'LOCAL',
@@ -38,7 +42,9 @@ async function getDashboardData(): Promise<DashboardResult | null> {
         lowStock: 0,
         activeShift: null,
         username: userData.username,
-        recentTransactions: []
+        recentTransactions: [],
+        chartData: [],
+        branchPerformance: []
     };
 
     if (userData.role === 'STORE_LEADER' || userData.role === 'STORE_SUPERVISOR') {
@@ -54,6 +60,7 @@ async function getDashboardData(): Promise<DashboardResult | null> {
             dashboardData.activeShift = shiftRes.rows[0] || null;
             dashboardData.recentTransactions = transactionsRes.rows || [];
             dashboardData.source = 'LOCAL (Branch)';
+            // Local chart data could be added here if needed, for now empty or simple local query
         } catch (error) {
             console.error("Local DB Error:", error);
         } finally {
@@ -65,8 +72,14 @@ async function getDashboardData(): Promise<DashboardResult | null> {
             const [salesRows]: any = await cloudDb.query(`SELECT COALESCE(SUM(total_amount), 0) as total, COUNT(*) as count FROM consolidated_transactions WHERE trx_date_local >= CURDATE()`);
             const [transactionsRows]: any = await cloudDb.query(`SELECT transaction_uuid, total_amount as grand_total, payment_method, trx_date_local as created_at, branch_id FROM consolidated_transactions ORDER BY trx_date_local DESC LIMIT 10`);
 
+            // Fetch Real Chart Data
+            const salesChart = await getSalesChartData();
+            const branchPerf = await getBranchPerformance();
+
             dashboardData.sales = salesRows?.[0] || { total: 0, count: 0 };
             dashboardData.recentTransactions = transactionsRows || [];
+            dashboardData.chartData = salesChart;
+            dashboardData.branchPerformance = branchPerf;
             dashboardData.source = 'CLOUD (Global HQ)';
         } catch (err) {
             console.error("Cloud DB Error:", err);
