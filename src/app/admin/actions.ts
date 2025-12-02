@@ -92,3 +92,51 @@ export async function getBranchPerformance() {
         return [];
     }
 }
+
+export async function getGlobalTransactionsAction() {
+    try {
+        const [rows]: any = await cloudDb.query(`
+            SELECT 
+                t.transaction_uuid,
+                t.trx_date_local as created_at,
+                t.total_amount as grand_total,
+                t.payment_method,
+                t.branch_id,
+                b.branch_name,
+                t.user_id as cashier_name
+            FROM consolidated_transactions t
+            LEFT JOIN branches b ON t.branch_id = b.branch_id
+            ORDER BY t.trx_date_local DESC
+            LIMIT 50
+        `);
+
+        return rows.map((r: any) => ({
+            ...r,
+            synced: true // Data from cloud is always synced
+        }));
+    } catch (error) {
+        console.error('Failed to fetch global transactions:', error);
+        return [];
+    }
+}
+
+export async function getGlobalTransactionDetailsAction(transactionUuid: string) {
+    try {
+        const [rows]: any = await cloudDb.query(`
+            SELECT 
+                ti.product_id,
+                ti.qty,
+                ti.price_at_sale,
+                ti.subtotal,
+                p.name as product_name
+            FROM consolidated_transaction_items ti
+            LEFT JOIN products_global p ON ti.product_id = p.product_id
+            WHERE ti.transaction_uuid = ?
+        `, [transactionUuid]);
+
+        return rows;
+    } catch (error) {
+        console.error('Failed to fetch global transaction details:', error);
+        return [];
+    }
+}

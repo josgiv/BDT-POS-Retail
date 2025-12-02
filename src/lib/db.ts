@@ -76,10 +76,7 @@ export async function checkLatency() {
         console.error('Cloud DB Error:', e);
     }
 
-    // Check Identity (Supabase) - simulated via fetch to health check or just assuming online if env is set
-    // Ideally we ping the Supabase DB but we don't have direct connection config for it easily accessible here 
-    // without parsing the connection string. We'll simulate or use a simple fetch if possible.
-    // For now, let's just mark it as 'online' if env vars exist, with a simulated latency or fetch the URL.
+    // Check Identity Service (Supabase)
     const startIdentity = performance.now();
     try {
         if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
@@ -87,7 +84,7 @@ export async function checkLatency() {
             results.identity = { status: 'online', latency: Math.round(performance.now() - startIdentity) };
         }
     } catch (e) {
-        // Supabase might block HEAD or return 404, but it means it's reachable.
+        // Service reachable even if HEAD fails
         results.identity = { status: 'online', latency: Math.round(performance.now() - startIdentity) };
     }
 

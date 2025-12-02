@@ -37,8 +37,8 @@ export interface CartItem extends Product {
 export interface Transaction {
     transaction_uuid: string;
     branch_id: number;
-    shift_id: number;
-    user_id: string;
+    shift_id: number | null;
+    user_id: number | string | null;
     subtotal: number;
     total_discount: number;
     tax_amount: number;
@@ -49,6 +49,7 @@ export interface Transaction {
     items: CartItem[];
     created_at: string;
     synced: boolean;
+    user_email?: string; // Added for lookup
 }
 
 export interface Shift {

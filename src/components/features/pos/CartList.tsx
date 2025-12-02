@@ -2,82 +2,89 @@
 
 import { useCartStore } from '@/store/cartStore';
 import { Button } from '@/components/ui/button';
-import { Trash2, Plus, Minus } from 'lucide-react';
+import { Trash2, Plus, Minus, ShoppingCart } from 'lucide-react';
 
 export function CartList() {
     const { items, updateQty, removeFromCart } = useCartStore();
 
     if (items.length === 0) {
         return (
-            <div className="flex flex-col items-center justify-center h-[400px] text-muted-foreground border-2 border-dashed rounded-lg">
-                <p className="text-lg">Keranjang Kosong</p>
-                <p className="text-sm">Scan barcode untuk mulai transaksi</p>
+            <div className="h-full flex flex-col items-center justify-center p-8 bg-neutral-50 text-center">
+                <div className="bg-neutral-100 p-6 rounded-full mb-4">
+                    <ShoppingCart className="h-12 w-12 text-neutral-300" />
+                </div>
+                <p className="text-lg font-semibold text-neutral-600">Keranjang Kosong</p>
+                <p className="text-sm text-neutral-400 mt-1 max-w-xs">
+                    Scan barcode atau cari produk di panel atas untuk mulai transaksi.
+                </p>
             </div>
         );
     }
 
     return (
-        <div className="border rounded-lg overflow-hidden bg-white shadow-sm">
-            <table className="w-full text-sm text-left">
-                <thead className="bg-neutral-100 text-neutral-600 uppercase text-xs">
-                    <tr>
-                        <th className="px-4 py-3">Produk</th>
-                        <th className="px-4 py-3 text-center">Harga</th>
-                        <th className="px-4 py-3 text-center">Qty</th>
-                        <th className="px-4 py-3 text-right">Subtotal</th>
-                        <th className="px-4 py-3 text-center">Aksi</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y">
-                    {items.map((item) => (
-                        <tr key={item.product_id} className="hover:bg-neutral-50">
-                            <td className="px-4 py-3 font-medium">
-                                <div className="flex flex-col">
-                                    <span className="text-base text-neutral-900">{item.name}</span>
-                                    <span className="text-xs text-neutral-500">{item.barcode}</span>
-                                </div>
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                                Rp {item.price.toLocaleString('id-ID')}
-                            </td>
-                            <td className="px-4 py-3">
-                                <div className="flex items-center justify-center gap-2">
-                                    <Button
-                                        variant="outline"
-                                        size="icon"
-                                        className="h-8 w-8"
-                                        onClick={() => updateQty(item.product_id, item.qty - 1)}
-                                    >
-                                        <Minus className="h-3 w-3" />
-                                    </Button>
-                                    <span className="w-8 text-center font-bold">{item.qty}</span>
-                                    <Button
-                                        variant="outline"
-                                        size="icon"
-                                        className="h-8 w-8"
-                                        onClick={() => updateQty(item.product_id, item.qty + 1)}
-                                    >
-                                        <Plus className="h-3 w-3" />
-                                    </Button>
-                                </div>
-                            </td>
-                            <td className="px-4 py-3 text-right font-bold text-neutral-900">
+        <div className="h-full flex flex-col">
+            {/* Table Header */}
+            <div className="grid grid-cols-12 gap-4 p-3 bg-neutral-100 text-xs font-semibold text-neutral-500 border-b">
+                <div className="col-span-5">PRODUK</div>
+                <div className="col-span-3 text-center">QUANTITY</div>
+                <div className="col-span-3 text-right">SUBTOTAL</div>
+                <div className="col-span-1 text-center">AKSI</div>
+            </div>
+
+            {/* Items List */}
+            <div className="flex-1 overflow-y-auto">
+                {items.map((item) => (
+                    <div key={item.product_id} className="grid grid-cols-12 gap-4 p-3 border-b hover:bg-neutral-50 items-center transition-colors">
+
+                        {/* Product Info */}
+                        <div className="col-span-5">
+                            <p className="font-semibold text-neutral-900 text-sm truncate" title={item.name}>{item.name}</p>
+                            <p className="text-xs text-neutral-500 font-mono">{item.barcode}</p>
+                            <p className="text-xs text-neutral-400 mt-0.5">@ Rp {item.price.toLocaleString('id-ID')}</p>
+                        </div>
+
+                        {/* Qty Control */}
+                        <div className="col-span-3 flex items-center justify-center gap-2">
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => updateQty(item.product_id, item.qty - 1)}
+                            >
+                                <Minus className="h-3 w-3" />
+                            </Button>
+                            <span className="w-8 text-center font-bold text-sm">{item.qty}</span>
+                            <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => updateQty(item.product_id, item.qty + 1)}
+                            >
+                                <Plus className="h-3 w-3" />
+                            </Button>
+                        </div>
+
+                        {/* Subtotal */}
+                        <div className="col-span-3 text-right">
+                            <p className="font-bold text-neutral-900 text-sm">
                                 Rp {item.subtotal.toLocaleString('id-ID')}
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                                    onClick={() => removeFromCart(item.product_id)}
-                                >
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
+                            </p>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="col-span-1 text-center">
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                onClick={() => removeFromCart(item.product_id)}
+                            >
+                                <Trash2 className="h-4 w-4" />
+                            </Button>
+                        </div>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }

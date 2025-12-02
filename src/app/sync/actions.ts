@@ -6,37 +6,15 @@ import { Transaction } from '@/types';
 export async function getUnsyncedTransactionsAction(): Promise<Transaction[]> {
     const client = await localDb.connect();
     try {
-        // Fetch transactions
-        const res = await client.query('SELECT * FROM transactions WHERE synced = false LIMIT 10');
-        const transactions: Transaction[] = [];
+        // Fetch from Upload Queue
+        const res = await client.query(`
+            SELECT payload 
+            FROM upload_queue 
+            WHERE status = 'PENDING' AND table_name = 'transactions' 
+            LIMIT 10
+        `);
 
-        for (const row of res.rows) {
-            // Fetch items for each transaction
-            const itemsRes = await client.query('SELECT * FROM transaction_items WHERE transaction_uuid = $1', [row.transaction_uuid]);
-
-            transactions.push({
-                transaction_uuid: row.transaction_uuid,
-                branch_id: row.branch_id,
-                shift_id: row.shift_id,
-                user_id: row.user_id,
-                subtotal: parseFloat(row.subtotal),
-                total_discount: parseFloat(row.total_discount),
-                tax_amount: parseFloat(row.tax_amount),
-                grand_total: parseFloat(row.grand_total),
-                payment_method: row.payment_method,
-                created_at: row.created_at,
-                synced: row.synced,
-                items: itemsRes.rows.map(item => ({
-                    product_id: item.product_id,
-                    barcode: '', // Not strictly needed for sync unless cloud needs it, but we can join if needed
-                    name: '', // Same
-                    price: parseFloat(item.price),
-                    qty: item.qty,
-                    subtotal: parseFloat(item.subtotal),
-                    stock: 0 // Not relevant here
-                }))
-            });
-        }
+        const transactions: Transaction[] = res.rows.map(row => row.payload);
         return transactions;
     } catch (error) {
         console.error('Error fetching unsynced transactions:', error);
@@ -53,36 +31,42 @@ export async function syncTransactionToCloudAction(transaction: Transaction): Pr
         try {
             await connection.beginTransaction();
 
-            // Insert Transaction
+            // Insert Transaction into Consolidated Table
             await connection.execute(
-                `INSERT INTO transactions 
-                (transaction_uuid, branch_id, shift_id, user_id, subtotal, total_discount, tax_amount, grand_total, payment_method, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                `INSERT INTO consolidated_transactions 
+                (transaction_uuid, branch_id, shift_id, total_amount, payment_method, trx_date_local, 
+                 subtotal, total_discount, tax_amount, cash_received, change_returned, user_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     transaction.transaction_uuid,
                     transaction.branch_id,
                     transaction.shift_id,
-                    transaction.user_id,
+                    transaction.grand_total, // total_amount
+                    transaction.payment_method,
+                    new Date(transaction.created_at),
                     transaction.subtotal,
                     transaction.total_discount,
                     transaction.tax_amount,
-                    transaction.grand_total,
-                    transaction.payment_method,
+                    transaction.cash_received || 0,
+                    transaction.change_returned || 0,
+                    transaction.user_id,
                     new Date(transaction.created_at)
                 ]
             );
 
-            // Insert Items
+            // Insert Items into Consolidated Items
             for (const item of transaction.items) {
                 await connection.execute(
-                    `INSERT INTO transaction_items (transaction_uuid, product_id, qty, price, subtotal)
-                    VALUES (?, ?, ?, ?, ?)`,
+                    `INSERT INTO consolidated_items (transaction_uuid, product_id, qty, final_price, subtotal, product_name, category)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)`,
                     [
                         transaction.transaction_uuid,
                         item.product_id,
                         item.qty,
-                        item.price,
-                        item.subtotal
+                        item.price, // final_price
+                        item.subtotal,
+                        item.name, // product_name
+                        item.category // category
                     ]
                 );
             }
@@ -105,9 +89,24 @@ export async function syncTransactionToCloudAction(transaction: Transaction): Pr
 export async function markTransactionSyncedAction(uuid: string): Promise<boolean> {
     const client = await localDb.connect();
     try {
-        await client.query('UPDATE transactions SET synced = true WHERE transaction_uuid = $1', [uuid]);
+        await client.query('BEGIN');
+
+        // 1. Update Upload Queue
+        await client.query(
+            "UPDATE retail_jakarta.upload_queue SET status = 'COMPLETED' WHERE record_uuid = $1",
+            [uuid]
+        );
+
+        // 2. Update Transaction Table (for local UI feedback)
+        await client.query(
+            'UPDATE retail_jakarta.transactions SET synced = true WHERE transaction_uuid = $1',
+            [uuid]
+        );
+
+        await client.query('COMMIT');
         return true;
     } catch (error) {
+        await client.query('ROLLBACK');
         console.error('Error marking transaction as synced:', error);
         return false;
     } finally {

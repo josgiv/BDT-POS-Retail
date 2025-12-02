@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
     LayoutDashboard,
     ShoppingCart,
@@ -31,6 +31,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { createClient } from '@/utils/supabase/client';
 
 interface AdminLayoutProps {
     children: React.ReactNode;
@@ -38,7 +39,25 @@ interface AdminLayoutProps {
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
     const pathname = usePathname();
+    const router = useRouter();
     const [isSidebarOpen, setIsSidebarOpen] = React.useState(true);
+    const [userEmail, setUserEmail] = React.useState('');
+    const [userRegion, setUserRegion] = React.useState('National');
+
+    React.useEffect(() => {
+        async function loadUser() {
+            const supabase = createClient();
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user?.email) {
+                setUserEmail(user.email);
+                // Determine region from email
+                if (user.email.includes('jkt')) setUserRegion('JABODETABEK');
+                else if (user.email.includes('bdg')) setUserRegion('JAWA BARAT');
+                else setUserRegion('National');
+            }
+        }
+        loadUser();
+    }, []);
 
     const menuItems = [
         { title: 'Executive Summary', icon: LayoutDashboard, href: '/admin/dashboard' },
@@ -90,6 +109,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 <div className="p-4 border-t border-neutral-800">
                     <Button
                         variant="ghost"
+                        onClick={async () => {
+                            const supabase = createClient();
+                            await supabase.auth.signOut();
+                            router.push('/login');
+                            router.refresh();
+                        }}
                         className={cn(
                             "w-full justify-start text-red-400 hover:text-red-300 hover:bg-red-900/20",
                             !isSidebarOpen && "justify-center px-0"
@@ -126,7 +151,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                             <DropdownMenuTrigger asChild>
                                 <Button variant="outline" className="hidden md:flex gap-2">
                                     <Map className="h-4 w-4 text-blue-600" />
-                                    <span>Region: JABODETABEK</span>
+                                    <span>Region: {userRegion}</span>
                                 </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-56">
