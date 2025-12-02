@@ -1,6 +1,6 @@
 'use server';
 
-import { checkConnections as checkDbConnections } from '@/lib/db';
+import { checkLatency as checkDbConnections } from '@/lib/db';
 import { supabase } from '@/lib/supabase';
 
 export async function checkConnectionsAction() {

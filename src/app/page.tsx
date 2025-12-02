@@ -52,7 +52,7 @@ export default function LandingPage() {
       <header className="bg-white border-b border-neutral-200 sticky top-0 z-50">
         <div className="container mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2 font-bold text-xl tracking-tight">
-            <span className="text-yellow-500">ALFA</span>MART
+            <span className="text-yellow-500">BAHLIL</span>MART
             <span className="text-neutral-400 text-sm font-normal ml-2 hidden md:inline-block">Distributed Retail System</span>
           </div>
 
