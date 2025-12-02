@@ -1,6 +1,8 @@
 import { EmployeesClient } from './client';
 import { localDb } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 async function getEmployees() {
     const client = await localDb.connect();
     try {

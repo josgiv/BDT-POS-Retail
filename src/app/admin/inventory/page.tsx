@@ -1,4 +1,5 @@
 import { localDb } from '@/lib/db';
+export const dynamic = 'force-dynamic';
 import {
     Table,
     TableBody,

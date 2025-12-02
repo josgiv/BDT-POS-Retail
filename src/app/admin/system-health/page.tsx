@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Activity, Server, Database, Cloud, Cpu, HardDrive, AlertTriangle, RefreshCw, Users, Shield, Lock, Network, Zap, Layers, Clock, Monitor, CheckCircle } from 'lucide-react';
 import { getSystemHealth } from './actions';
+export const dynamic = 'force-dynamic';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { motion } from 'framer-motion';
