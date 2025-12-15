@@ -6,18 +6,24 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import {
     Store,
     Database,
     Wifi,
     WifiOff,
     ShoppingCart,
     Clock,
-    User,
     Zap,
     CheckCircle2,
-    AlertCircle,
     Monitor,
-    HardDrive
+    HardDrive,
+    MapPin
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
@@ -29,20 +35,55 @@ interface ConnectionStatus {
     cloudLatency: number;
 }
 
+interface Branch {
+    id: number;
+    code: string;
+    name: string;
+    region: string;
+    address: string;
+}
+
+// Available branches - matches database
+const BRANCHES: Branch[] = [
+    { id: 101, code: 'JKT-001', name: 'Alfamart Jakarta Timur', region: 'JABODETABEK', address: 'Jl. Pemuda No. 1, Rawamangun' },
+    { id: 102, code: 'BDG-001', name: 'Alfamart Dago Atas', region: 'JAWA BARAT', address: 'Jl. Ir. H. Juanda No. 88, Bandung' },
+];
+
+const STORAGE_KEY = 'alfamart_selected_branch';
+
 export default function CashierLandingPage() {
     const router = useRouter();
     const [currentTime, setCurrentTime] = useState(new Date());
     const [status, setStatus] = useState<ConnectionStatus>({
         local: true,
-        cloud: navigator.onLine,
+        cloud: typeof window !== 'undefined' ? navigator.onLine : true,
         localLatency: 1,
         cloudLatency: 45
     });
-    const [storeInfo] = useState({
-        code: 'JKT-001',
-        name: 'Alfamart Jakarta Timur',
-        address: 'Jl. Pemuda No. 1, Rawamangun'
-    });
+
+    // Branch selection state
+    const [selectedBranch, setSelectedBranch] = useState<Branch>(BRANCHES[0]);
+
+    // Load saved branch from localStorage
+    useEffect(() => {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+            const branchId = parseInt(saved);
+            const branch = BRANCHES.find(b => b.id === branchId);
+            if (branch) {
+                setSelectedBranch(branch);
+            }
+        }
+    }, []);
+
+    // Save branch selection to localStorage
+    const handleBranchChange = (branchId: string) => {
+        const branch = BRANCHES.find(b => b.id === parseInt(branchId));
+        if (branch) {
+            setSelectedBranch(branch);
+            localStorage.setItem(STORAGE_KEY, branchId);
+        }
+    };
 
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -81,6 +122,13 @@ export default function CashierLandingPage() {
             month: 'long',
             year: 'numeric'
         });
+    };
+
+    // Navigate to login with branch info stored
+    const handleStartTransaction = () => {
+        // Store branch info for POS page to use
+        localStorage.setItem(STORAGE_KEY, String(selectedBranch.id));
+        router.push('/login');
     };
 
     return (
@@ -147,7 +195,7 @@ export default function CashierLandingPage() {
                             <h2 className="text-5xl font-extrabold text-neutral-900 leading-tight">
                                 Selamat Datang di
                                 <span className="block text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-red-600">
-                                    {storeInfo.name}
+                                    {selectedBranch.name}
                                 </span>
                             </h2>
                             <p className="text-lg text-neutral-600 max-w-md">
@@ -155,20 +203,54 @@ export default function CashierLandingPage() {
                             </p>
                         </div>
 
-                        {/* Store Details */}
-                        <Card className="bg-white/70 backdrop-blur border-neutral-200/50">
-                            <CardContent className="p-6">
-                                <div className="flex items-start gap-4">
-                                    <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center shrink-0">
-                                        <Store className="h-6 w-6 text-orange-600" />
-                                    </div>
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <Badge variant="outline" className="text-xs font-bold bg-orange-50 text-orange-700 border-orange-200">
-                                                {storeInfo.code}
-                                            </Badge>
+                        {/* Branch Selector Card */}
+                        <Card className="bg-white/90 backdrop-blur border-2 border-orange-200 shadow-xl">
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-lg flex items-center gap-2">
+                                    <MapPin className="h-5 w-5 text-orange-600" />
+                                    Pilih Cabang
+                                </CardTitle>
+                                <CardDescription>
+                                    Semua transaksi akan disimpan untuk cabang ini
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <Select value={String(selectedBranch.id)} onValueChange={handleBranchChange}>
+                                    <SelectTrigger className="w-full h-12 text-base">
+                                        <SelectValue placeholder="Pilih cabang..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {BRANCHES.map((branch) => (
+                                            <SelectItem key={branch.id} value={String(branch.id)}>
+                                                <div className="flex items-center gap-2">
+                                                    <Badge variant="outline" className="text-xs font-bold">
+                                                        {branch.code}
+                                                    </Badge>
+                                                    <span>{branch.name}</span>
+                                                </div>
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+
+                                {/* Selected Branch Info */}
+                                <div className="p-4 bg-orange-50 rounded-xl border border-orange-100">
+                                    <div className="flex items-start gap-4">
+                                        <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center shrink-0">
+                                            <Store className="h-6 w-6 text-orange-600" />
                                         </div>
-                                        <p className="text-sm text-neutral-600">{storeInfo.address}</p>
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <Badge variant="outline" className="text-xs font-bold bg-orange-100 text-orange-700 border-orange-200">
+                                                    {selectedBranch.code}
+                                                </Badge>
+                                                <Badge className="text-xs bg-blue-100 text-blue-700 border-blue-200">
+                                                    {selectedBranch.region}
+                                                </Badge>
+                                            </div>
+                                            <p className="text-sm text-neutral-600">{selectedBranch.address}</p>
+                                            <p className="text-xs text-neutral-400 mt-1">Branch ID: {selectedBranch.id}</p>
+                                        </div>
                                     </div>
                                 </div>
                             </CardContent>
@@ -178,7 +260,7 @@ export default function CashierLandingPage() {
                         <div className="flex flex-col sm:flex-row gap-4">
                             <Button
                                 size="lg"
-                                onClick={() => router.push('/login')}
+                                onClick={handleStartTransaction}
                                 className="h-16 px-8 text-lg font-bold bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white rounded-2xl shadow-xl shadow-orange-500/30 transition-all hover:scale-[1.02] active:scale-[0.98]"
                             >
                                 <ShoppingCart className="mr-3 h-6 w-6" />
@@ -274,7 +356,7 @@ export default function CashierLandingPage() {
                     <div>© 2024 Alfamart Retail System - POS Terminal v1.0</div>
                     <div className="flex items-center gap-2">
                         <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                        Sistem Berjalan Normal
+                        Sistem Berjalan Normal • {selectedBranch.code}
                     </div>
                 </div>
             </footer>

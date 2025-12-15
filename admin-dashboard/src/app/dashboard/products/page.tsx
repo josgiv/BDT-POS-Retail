@@ -6,14 +6,52 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Search, Filter, Plus, Edit, RefreshCw } from 'lucide-react';
+import { Label } from '@/components/ui/label';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import { Search, Filter, Plus, Edit, RefreshCw, Trash2, Save, X } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
-import { getGlobalProducts } from '../actions';
+import { getGlobalProducts, createProduct, updateProduct, deleteProduct } from '../actions';
+import { toast } from 'sonner';
+
+interface Product {
+    product_id: number;
+    barcode: string;
+    name: string;
+    category: string;
+    price: number;
+    tax_rate: number;
+    is_active: boolean | number;
+}
+
+const CATEGORIES = ['BEVERAGE', 'FOOD', 'SNACK', 'STAPLE', 'BAKERY', 'CIGARETTE', 'DAIRY', 'FRESH', 'PERSONAL_CARE', 'HOUSEHOLD'];
 
 export default function ProductsPage() {
-    const [products, setProducts] = useState<any[]>([]);
+    const [products, setProducts] = useState<Product[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [isLoading, setIsLoading] = useState(true);
+
+    // Modal states
+    const [isEditOpen, setIsEditOpen] = useState(false);
+    const [isAddOpen, setIsAddOpen] = useState(false);
+    const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+    const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+
+    // Form state
+    const [formData, setFormData] = useState({
+        barcode: '',
+        name: '',
+        category: '',
+        price: '',
+        tax_rate: '11',
+    });
 
     useEffect(() => {
         loadProducts();
@@ -26,8 +64,115 @@ export default function ProductsPage() {
             setProducts(data);
         } catch (error) {
             console.error(error);
+            toast.error('Gagal memuat data produk');
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleEdit = (product: Product) => {
+        setSelectedProduct(product);
+        setFormData({
+            barcode: product.barcode || '',
+            name: product.name || '',
+            category: product.category || '',
+            price: String(product.price || ''),
+            tax_rate: String(product.tax_rate || '11'),
+        });
+        setIsEditOpen(true);
+    };
+
+    const handleAdd = () => {
+        setFormData({
+            barcode: '',
+            name: '',
+            category: 'FOOD',
+            price: '',
+            tax_rate: '11',
+        });
+        setIsAddOpen(true);
+    };
+
+    const handleDelete = (product: Product) => {
+        setSelectedProduct(product);
+        setIsDeleteOpen(true);
+    };
+
+    const handleSaveEdit = async () => {
+        if (!selectedProduct) return;
+
+        setIsSaving(true);
+        try {
+            const result = await updateProduct(selectedProduct.product_id, {
+                barcode: formData.barcode,
+                name: formData.name,
+                category: formData.category,
+                price: parseFloat(formData.price),
+                tax_rate: parseFloat(formData.tax_rate),
+            });
+
+            if (result.success) {
+                toast.success('Produk berhasil diperbarui');
+                setIsEditOpen(false);
+                loadProducts();
+            } else {
+                toast.error(result.error || 'Gagal memperbarui produk');
+            }
+        } catch (error) {
+            toast.error('Terjadi kesalahan');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleSaveAdd = async () => {
+        if (!formData.barcode || !formData.name || !formData.price) {
+            toast.error('Harap isi semua field yang diperlukan');
+            return;
+        }
+
+        setIsSaving(true);
+        try {
+            const result = await createProduct({
+                barcode: formData.barcode,
+                name: formData.name,
+                category: formData.category,
+                price: parseFloat(formData.price),
+                tax_rate: parseFloat(formData.tax_rate),
+            });
+
+            if (result.success) {
+                toast.success('Produk berhasil ditambahkan');
+                setIsAddOpen(false);
+                loadProducts();
+            } else {
+                toast.error(result.error || 'Gagal menambahkan produk');
+            }
+        } catch (error) {
+            toast.error('Terjadi kesalahan');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!selectedProduct) return;
+
+        setIsSaving(true);
+        try {
+            const result = await deleteProduct(selectedProduct.product_id);
+
+            if (result.success) {
+                toast.success('Produk berhasil dihapus');
+                setIsDeleteOpen(false);
+                loadProducts();
+            } else {
+                toast.error(result.error || 'Gagal menghapus produk');
+            }
+        } catch (error) {
+            toast.error('Terjadi kesalahan');
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -44,7 +189,7 @@ export default function ProductsPage() {
                     <h2 className="text-2xl font-bold text-slate-900">Master Produk</h2>
                     <p className="text-slate-500">Katalog produk global dari TiDB Cloud</p>
                 </div>
-                <Button>
+                <Button onClick={handleAdd}>
                     <Plus className="mr-2 h-4 w-4" />
                     Tambah Produk
                 </Button>
@@ -114,9 +259,14 @@ export default function ProductsPage() {
                                             )}
                                         </TableCell>
                                         <TableCell className="text-center">
-                                            <Button variant="ghost" size="icon">
-                                                <Edit className="h-4 w-4" />
-                                            </Button>
+                                            <div className="flex items-center justify-center gap-1">
+                                                <Button variant="ghost" size="icon" onClick={() => handleEdit(product)}>
+                                                    <Edit className="h-4 w-4" />
+                                                </Button>
+                                                <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-700" onClick={() => handleDelete(product)}>
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -132,6 +282,129 @@ export default function ProductsPage() {
                     )}
                 </CardContent>
             </Card>
+
+            {/* Edit Product Modal */}
+            <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Edit Produk</DialogTitle>
+                        <DialogDescription>Ubah informasi produk di database TiDB Cloud</DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid gap-2">
+                            <Label htmlFor="edit-barcode">Barcode</Label>
+                            <Input id="edit-barcode" value={formData.barcode} onChange={(e) => setFormData({ ...formData, barcode: e.target.value })} />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="edit-name">Nama Produk</Label>
+                            <Input id="edit-name" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="edit-category">Kategori</Label>
+                            <select
+                                id="edit-category"
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                value={formData.category}
+                                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                            >
+                                {CATEGORIES.map(cat => (
+                                    <option key={cat} value={cat}>{cat}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="grid gap-2">
+                                <Label htmlFor="edit-price">Harga (Rp)</Label>
+                                <Input id="edit-price" type="number" value={formData.price} onChange={(e) => setFormData({ ...formData, price: e.target.value })} />
+                            </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="edit-tax">Tax Rate (%)</Label>
+                                <Input id="edit-tax" type="number" value={formData.tax_rate} onChange={(e) => setFormData({ ...formData, tax_rate: e.target.value })} />
+                            </div>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsEditOpen(false)}>
+                            <X className="mr-2 h-4 w-4" /> Batal
+                        </Button>
+                        <Button onClick={handleSaveEdit} disabled={isSaving}>
+                            <Save className="mr-2 h-4 w-4" /> {isSaving ? 'Menyimpan...' : 'Simpan'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Add Product Modal */}
+            <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Tambah Produk Baru</DialogTitle>
+                        <DialogDescription>Tambahkan produk baru ke katalog global TiDB Cloud</DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid gap-2">
+                            <Label htmlFor="add-barcode">Barcode *</Label>
+                            <Input id="add-barcode" placeholder="8999999195483" value={formData.barcode} onChange={(e) => setFormData({ ...formData, barcode: e.target.value })} />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="add-name">Nama Produk *</Label>
+                            <Input id="add-name" placeholder="Indomie Goreng Original" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="add-category">Kategori</Label>
+                            <select
+                                id="add-category"
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                value={formData.category}
+                                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                            >
+                                {CATEGORIES.map(cat => (
+                                    <option key={cat} value={cat}>{cat}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="grid gap-2">
+                                <Label htmlFor="add-price">Harga (Rp) *</Label>
+                                <Input id="add-price" type="number" placeholder="15000" value={formData.price} onChange={(e) => setFormData({ ...formData, price: e.target.value })} />
+                            </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="add-tax">Tax Rate (%)</Label>
+                                <Input id="add-tax" type="number" value={formData.tax_rate} onChange={(e) => setFormData({ ...formData, tax_rate: e.target.value })} />
+                            </div>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsAddOpen(false)}>
+                            <X className="mr-2 h-4 w-4" /> Batal
+                        </Button>
+                        <Button onClick={handleSaveAdd} disabled={isSaving}>
+                            <Plus className="mr-2 h-4 w-4" /> {isSaving ? 'Menambahkan...' : 'Tambah Produk'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Delete Confirmation Modal */}
+            <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Hapus Produk</DialogTitle>
+                        <DialogDescription>
+                            Apakah Anda yakin ingin menghapus produk <span className="font-bold">{selectedProduct?.name}</span>?
+                            Produk akan dinonaktifkan (soft delete).
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsDeleteOpen(false)}>
+                            Batal
+                        </Button>
+                        <Button variant="destructive" onClick={handleConfirmDelete} disabled={isSaving}>
+                            <Trash2 className="mr-2 h-4 w-4" /> {isSaving ? 'Menghapus...' : 'Hapus Produk'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

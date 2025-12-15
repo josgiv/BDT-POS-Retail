@@ -15,7 +15,8 @@ import {
     LogOut,
     BarChart3,
     ChevronLeft,
-    Menu
+    Menu,
+    Activity
 } from 'lucide-react';
 
 const navItems = [
@@ -25,6 +26,7 @@ const navItems = [
     { href: '/dashboard/branches', icon: Store, label: 'Cabang' },
     { href: '/dashboard/employees', icon: Users, label: 'Karyawan' },
     { href: '/dashboard/reports', icon: FileText, label: 'Laporan' },
+    { href: '/dashboard/system-health', icon: Activity, label: 'System Health' },
     { href: '/dashboard/settings', icon: Settings, label: 'Pengaturan' },
 ];
 

@@ -24,12 +24,30 @@ import {
     Package,
     CheckCircle2,
     Loader2,
-    X
+    X,
+    History,
+    Boxes,
+    Lock,
+    Eye,
+    Edit2,
+    AlertCircle,
+    CloudUpload,
+    Check
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn, formatCurrency } from '@/lib/utils';
-import { searchProductsAction, saveTransactionAction, getProductsAction } from './actions';
+import {
+    searchProductsAction,
+    saveTransactionAction,
+    getProductsAction,
+    getTodayTransactionsAction,
+    getTransactionItemsAction,
+    verifyAdminPinAction,
+    getInventoryWithStockAction,
+    updateProductStockAction,
+    getTodayStatsSummaryAction
+} from './actions';
 import type { Product } from '@/types';
 
 interface UserData {
@@ -55,6 +73,27 @@ export default function POSPage() {
     const [isProcessing, setIsProcessing] = useState(false);
     const searchRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+
+    // Transaction History Modal
+    const [showHistoryModal, setShowHistoryModal] = useState(false);
+    const [todayTransactions, setTodayTransactions] = useState<any[]>([]);
+    const [todayStats, setTodayStats] = useState<any>(null);
+    const [loadingHistory, setLoadingHistory] = useState(false);
+    const [selectedTrx, setSelectedTrx] = useState<any>(null);
+    const [trxItems, setTrxItems] = useState<any[]>([]);
+
+    // Inventory Modal
+    const [showInventoryModal, setShowInventoryModal] = useState(false);
+    const [showPinModal, setShowPinModal] = useState(false);
+    const [inventoryItems, setInventoryItems] = useState<any[]>([]);
+    const [loadingInventory, setLoadingInventory] = useState(false);
+    const [pinInput, setPinInput] = useState('');
+    const [pinError, setPinError] = useState('');
+    const [inventoryUnlocked, setInventoryUnlocked] = useState(false);
+    const [editingProduct, setEditingProduct] = useState<any>(null);
+    const [editQty, setEditQty] = useState('');
+    const [updatingStock, setUpdatingStock] = useState(false);
+    const [inventorySearch, setInventorySearch] = useState('');
 
     const {
         items,
@@ -226,6 +265,116 @@ export default function POSPage() {
 
     const formatTime = (date: Date) => date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 
+    // ========== TRANSACTION HISTORY HANDLERS ==========
+    const openHistoryModal = async () => {
+        setShowHistoryModal(true);
+        setLoadingHistory(true);
+        setSelectedTrx(null);
+        setTrxItems([]);
+        try {
+            const [trx, stats] = await Promise.all([
+                getTodayTransactionsAction(String(user?.branchId || '101')),
+                getTodayStatsSummaryAction(String(user?.branchId || '101'))
+            ]);
+            setTodayTransactions(trx);
+            setTodayStats(stats);
+        } catch (error) {
+            console.error(error);
+            toast.error('Gagal memuat riwayat transaksi');
+        } finally {
+            setLoadingHistory(false);
+        }
+    };
+
+    const viewTransactionDetails = async (trx: any) => {
+        setSelectedTrx(trx);
+        try {
+            const items = await getTransactionItemsAction(trx.transaction_uuid, String(user?.branchId || '101'));
+            setTrxItems(items);
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
+    // ========== INVENTORY MANAGEMENT HANDLERS ==========
+    const openInventoryModal = () => {
+        if (!inventoryUnlocked) {
+            setShowPinModal(true);
+            setPinInput('');
+            setPinError('');
+        } else {
+            loadInventory();
+        }
+    };
+
+    const verifyPin = async () => {
+        const result = await verifyAdminPinAction(pinInput);
+        if (result.success) {
+            setInventoryUnlocked(true);
+            setShowPinModal(false);
+            setPinInput('');
+            setPinError('');
+            loadInventory();
+            toast.success('PIN terverifikasi - Akses Inventory diberikan');
+        } else {
+            setPinError(result.error || 'PIN tidak valid');
+        }
+    };
+
+    const loadInventory = async () => {
+        setShowInventoryModal(true);
+        setLoadingInventory(true);
+        try {
+            const inv = await getInventoryWithStockAction(String(user?.branchId || '101'));
+            setInventoryItems(inv);
+        } catch (error) {
+            console.error(error);
+            toast.error('Gagal memuat inventory');
+        } finally {
+            setLoadingInventory(false);
+        }
+    };
+
+    const startEditStock = (product: any) => {
+        setEditingProduct(product);
+        setEditQty(String(product.qty_on_hand));
+    };
+
+    const saveStockUpdate = async () => {
+        if (!editingProduct) return;
+        setUpdatingStock(true);
+        try {
+            const result = await updateProductStockAction(
+                editingProduct.product_id,
+                parseInt(editQty),
+                String(user?.branchId || '101'),
+                'Manual adjustment by cashier'
+            );
+            if (result.success) {
+                toast.success(`Stok ${editingProduct.name} diupdate ke ${editQty}`, {
+                    description: 'Tersinkron ke TiDB Cloud'
+                });
+                // Refresh inventory
+                const inv = await getInventoryWithStockAction(String(user?.branchId || '101'));
+                setInventoryItems(inv);
+                setEditingProduct(null);
+            } else {
+                toast.error(result.error || 'Gagal update stok');
+            }
+        } catch (error) {
+            console.error(error);
+            toast.error('Terjadi kesalahan');
+        } finally {
+            setUpdatingStock(false);
+        }
+    };
+
+    const filteredInventory = inventoryItems.filter(item =>
+        item.name?.toLowerCase().includes(inventorySearch.toLowerCase()) ||
+        item.barcode?.includes(inventorySearch) ||
+        item.category?.toLowerCase().includes(inventorySearch.toLowerCase())
+    );
+
     if (!user) return null;
 
     return (
@@ -258,6 +407,29 @@ export default function POSPage() {
                     <div className="flex items-center gap-2 text-muted-foreground">
                         <Clock className="h-4 w-4" />
                         <span className="font-mono font-bold">{formatTime(currentTime)}</span>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex items-center gap-2 border-l pl-4">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={openHistoryModal}
+                            className="flex items-center gap-2"
+                        >
+                            <History className="h-4 w-4" />
+                            <span className="hidden md:inline">Riwayat</span>
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={openInventoryModal}
+                            className="flex items-center gap-2"
+                        >
+                            <Boxes className="h-4 w-4" />
+                            <span className="hidden md:inline">Inventori</span>
+                            {inventoryUnlocked && <Check className="h-3 w-3 text-green-500" />}
+                        </Button>
                     </div>
 
                     {/* User Info */}
@@ -544,6 +716,323 @@ export default function POSPage() {
                     </div>
                 </div>
             </div>
+
+            {/* Transaction History Modal */}
+            <AnimatePresence>
+                {showHistoryModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+                        onClick={() => setShowHistoryModal(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            className="bg-card rounded-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden shadow-2xl"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <History className="h-6 w-6" />
+                                        <div>
+                                            <h2 className="text-xl font-bold">Riwayat Transaksi Hari Ini</h2>
+                                            <p className="text-sm opacity-80">Store #{user?.branchId} • {new Date().toLocaleDateString('id-ID', { dateStyle: 'full' })}</p>
+                                        </div>
+                                    </div>
+                                    <Button variant="ghost" size="icon" onClick={() => setShowHistoryModal(false)} className="text-white hover:bg-white/20">
+                                        <X className="h-5 w-5" />
+                                    </Button>
+                                </div>
+
+                                {/* Stats Summary */}
+                                {todayStats && (
+                                    <div className="grid grid-cols-4 gap-4 mt-6">
+                                        <div className="bg-white/10 rounded-xl p-3">
+                                            <p className="text-xs opacity-70">Total Transaksi</p>
+                                            <p className="text-2xl font-bold">{todayStats.total_transactions}</p>
+                                        </div>
+                                        <div className="bg-white/10 rounded-xl p-3">
+                                            <p className="text-xs opacity-70">Total Revenue</p>
+                                            <p className="text-2xl font-bold">{formatCurrency(todayStats.total_revenue)}</p>
+                                        </div>
+                                        <div className="bg-white/10 rounded-xl p-3">
+                                            <p className="text-xs opacity-70">Items Sold</p>
+                                            <p className="text-2xl font-bold">{todayStats.total_items_sold}</p>
+                                        </div>
+                                        <div className="bg-white/10 rounded-xl p-3">
+                                            <p className="text-xs opacity-70">Rata-rata</p>
+                                            <p className="text-2xl font-bold">{formatCurrency(todayStats.avg_transaction)}</p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex h-[50vh]">
+                                {/* Transaction List */}
+                                <div className="w-1/2 border-r overflow-y-auto">
+                                    {loadingHistory ? (
+                                        <div className="flex items-center justify-center h-full">
+                                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                                        </div>
+                                    ) : todayTransactions.length === 0 ? (
+                                        <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                                            <ShoppingCart className="h-12 w-12 mb-3 opacity-40" />
+                                            <p>Belum ada transaksi hari ini</p>
+                                        </div>
+                                    ) : (
+                                        <div className="divide-y">
+                                            {todayTransactions.map((trx) => (
+                                                <div
+                                                    key={trx.transaction_uuid}
+                                                    className={cn(
+                                                        "p-4 cursor-pointer hover:bg-muted/50 transition-colors",
+                                                        selectedTrx?.transaction_uuid === trx.transaction_uuid && "bg-primary/5 border-l-4 border-primary"
+                                                    )}
+                                                    onClick={() => viewTransactionDetails(trx)}
+                                                >
+                                                    <div className="flex items-start justify-between">
+                                                        <div>
+                                                            <p className="font-mono text-xs text-muted-foreground">{trx.transaction_uuid.slice(0, 8)}...</p>
+                                                            <p className="font-bold text-lg">{formatCurrency(trx.grand_total)}</p>
+                                                            <div className="flex items-center gap-2 mt-1">
+                                                                <Badge variant="outline" className="text-xs">{trx.payment_method}</Badge>
+                                                                {trx.synced ? (
+                                                                    <Badge className="bg-green-100 text-green-700 text-xs">Synced</Badge>
+                                                                ) : (
+                                                                    <Badge className="bg-yellow-100 text-yellow-700 text-xs">Pending</Badge>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <p className="text-xs text-muted-foreground">{new Date(trx.created_at).toLocaleTimeString('id-ID')}</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Transaction Detail */}
+                                <div className="w-1/2 p-6 bg-muted/30">
+                                    {selectedTrx ? (
+                                        <div>
+                                            <h3 className="font-bold text-lg mb-4">Detail Transaksi</h3>
+                                            <div className="space-y-2 mb-6">
+                                                <p className="text-sm"><span className="text-muted-foreground">ID:</span> {selectedTrx.transaction_uuid}</p>
+                                                <p className="text-sm"><span className="text-muted-foreground">Waktu:</span> {new Date(selectedTrx.created_at).toLocaleString('id-ID')}</p>
+                                                <p className="text-sm"><span className="text-muted-foreground">Pembayaran:</span> {selectedTrx.payment_method}</p>
+                                            </div>
+                                            <h4 className="font-semibold text-sm mb-2">Items:</h4>
+                                            <div className="space-y-2">
+                                                {trxItems.map((item, idx) => (
+                                                    <div key={idx} className="flex justify-between p-2 bg-white rounded-lg">
+                                                        <div>
+                                                            <p className="font-medium text-sm">{item.product_name || `Product #${item.product_id}`}</p>
+                                                            <p className="text-xs text-muted-foreground">{item.qty} x {formatCurrency(item.price_at_sale)}</p>
+                                                        </div>
+                                                        <p className="font-bold text-sm">{formatCurrency(item.subtotal)}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <div className="mt-4 pt-4 border-t">
+                                                <div className="flex justify-between text-sm"><span>Subtotal</span><span>{formatCurrency(selectedTrx.subtotal)}</span></div>
+                                                <div className="flex justify-between text-sm"><span>Pajak</span><span>{formatCurrency(selectedTrx.tax_amount)}</span></div>
+                                                <div className="flex justify-between font-bold text-lg mt-2"><span>Total</span><span>{formatCurrency(selectedTrx.grand_total)}</span></div>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                                            <Eye className="h-10 w-10 mb-3 opacity-40" />
+                                            <p>Pilih transaksi untuk melihat detail</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* PIN Modal */}
+            <AnimatePresence>
+                {showPinModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+                        onClick={() => setShowPinModal(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            className="bg-card rounded-2xl w-full max-w-sm p-6 shadow-2xl"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            <div className="text-center mb-6">
+                                <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <Lock className="h-8 w-8 text-orange-600" />
+                                </div>
+                                <h2 className="text-xl font-bold">Verifikasi PIN SPV</h2>
+                                <p className="text-sm text-muted-foreground mt-1">Masukkan PIN untuk akses inventory</p>
+                            </div>
+
+                            <div className="space-y-4">
+                                <Input
+                                    type="password"
+                                    value={pinInput}
+                                    onChange={(e) => setPinInput(e.target.value)}
+                                    placeholder="Masukkan PIN..."
+                                    className="h-14 text-center text-2xl tracking-[0.5em] font-mono"
+                                    maxLength={6}
+                                    autoFocus
+                                    onKeyDown={(e) => e.key === 'Enter' && verifyPin()}
+                                />
+                                {pinError && (
+                                    <div className="flex items-center gap-2 text-red-600 text-sm justify-center">
+                                        <AlertCircle className="h-4 w-4" />
+                                        {pinError}
+                                    </div>
+                                )}
+                                <Button className="w-full h-12" onClick={verifyPin} disabled={pinInput.length < 4}>
+                                    <Lock className="h-4 w-4 mr-2" />
+                                    Verifikasi
+                                </Button>
+                                <Button variant="ghost" className="w-full" onClick={() => setShowPinModal(false)}>
+                                    Batal
+                                </Button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Inventory Modal */}
+            <AnimatePresence>
+                {showInventoryModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+                        onClick={() => { setShowInventoryModal(false); setEditingProduct(null); }}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            className="bg-card rounded-2xl w-full max-w-5xl max-h-[85vh] overflow-hidden shadow-2xl"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            <div className="bg-gradient-to-r from-orange-600 to-amber-500 p-6 text-white">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <Boxes className="h-6 w-6" />
+                                        <div>
+                                            <h2 className="text-xl font-bold">Manajemen Inventory</h2>
+                                            <p className="text-sm opacity-80">Store #{user?.branchId} • {inventoryItems.length} produk</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <Badge className="bg-white/20 text-white">
+                                            <CloudUpload className="h-3 w-3 mr-1" />
+                                            Synced to TiDB
+                                        </Badge>
+                                        <Button variant="ghost" size="icon" onClick={() => { setShowInventoryModal(false); setEditingProduct(null); }} className="text-white hover:bg-white/20">
+                                            <X className="h-5 w-5" />
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                {/* Search */}
+                                <div className="mt-4 relative">
+                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/60" />
+                                    <Input
+                                        value={inventorySearch}
+                                        onChange={(e) => setInventorySearch(e.target.value)}
+                                        placeholder="Cari produk..."
+                                        className="pl-10 bg-white/10 border-white/20 text-white placeholder:text-white/50"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="h-[55vh] overflow-y-auto p-4">
+                                {loadingInventory ? (
+                                    <div className="flex items-center justify-center h-full">
+                                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                                    </div>
+                                ) : filteredInventory.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                                        <Package className="h-12 w-12 mb-3 opacity-40" />
+                                        <p>Tidak ada produk ditemukan</p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        {filteredInventory.map((item) => {
+                                            const isLowStock = item.qty_on_hand <= item.min_stock;
+                                            const isEditing = editingProduct?.product_id === item.product_id;
+                                            return (
+                                                <Card key={item.product_id} className={cn("overflow-hidden", isLowStock && "border-red-200")}>
+                                                    <CardContent className="p-4">
+                                                        <div className="flex items-start justify-between mb-3">
+                                                            <div>
+                                                                <p className="font-bold text-sm">{item.name}</p>
+                                                                <p className="text-xs text-muted-foreground">{item.barcode}</p>
+                                                            </div>
+                                                            <Badge variant="outline" className="text-xs">{item.category}</Badge>
+                                                        </div>
+
+                                                        <div className="flex items-center justify-between">
+                                                            <div>
+                                                                <p className="text-xs text-muted-foreground">Stok</p>
+                                                                {isEditing ? (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Input
+                                                                            type="number"
+                                                                            value={editQty}
+                                                                            onChange={(e) => setEditQty(e.target.value)}
+                                                                            className="w-20 h-8 text-center"
+                                                                            min={0}
+                                                                        />
+                                                                        <Button size="sm" className="h-8" onClick={saveStockUpdate} disabled={updatingStock}>
+                                                                            {updatingStock ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                                                                        </Button>
+                                                                        <Button size="sm" variant="ghost" className="h-8" onClick={() => setEditingProduct(null)}>
+                                                                            <X className="h-3 w-3" />
+                                                                        </Button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <p className={cn("text-2xl font-bold", isLowStock ? "text-red-600" : "text-foreground")}>
+                                                                        {item.qty_on_hand}
+                                                                        {isLowStock && <AlertCircle className="inline h-4 w-4 ml-1 text-red-500" />}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                            {!isEditing && (
+                                                                <Button size="sm" variant="outline" onClick={() => startEditStock(item)}>
+                                                                    <Edit2 className="h-3 w-3 mr-1" />
+                                                                    Edit
+                                                                </Button>
+                                                            )}
+                                                        </div>
+
+                                                        <p className="text-xs text-muted-foreground mt-2">Min. stok: {item.min_stock}</p>
+                                                    </CardContent>
+                                                </Card>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
+
