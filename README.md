@@ -1,36 +1,87 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Alfamart Retail POS System
 
-## Getting Started
+A distributed Point of Sale (POS) system with separate Cashier and Admin applications.
 
-First, run the development server:
+## Project Structure
+
+```
+alfa-retail-pos/
+├── cashier-pos/          # Local-first POS for store terminals
+├── admin-dashboard/      # Cloud-first management dashboard
+├── QUERYSCRIPTREFRENCE/  # SQL reference scripts
+└── README.md             # This file
+```
+
+## Applications
+
+### Alfamart POS (`cashier-pos/`)
+
+Local-first Point of Sale system for store cashiers.
+
+- **Port:** 3000
+- **Database:** Local PostgreSQL (primary) + TiDB Cloud (sync)
+- **Auth:** PIN-based local authentication
+- **Features:** Product search, barcode scanning, cart management, multiple payment methods
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
+cd cashier-pos
+bun install
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Alfamart Admin Dashboard (`admin-dashboard/`)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Cloud-first management dashboard for administrators.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **Port:** 3001
+- **Database:** TiDB Cloud only
+- **Auth:** Supabase email/password
+- **Features:** Sales analytics, branch performance, transaction history, employee management
 
-## Learn More
+```bash
+cd admin-dashboard
+bun install
+bun dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Database Architecture
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Layer | Technology | Purpose |
+|-------|------------|---------|
+| Local | PostgreSQL | Store transactions, products, inventory |
+| Cloud | TiDB (MySQL) | Consolidated data from all branches |
+| Auth | Supabase | User authentication and profiles |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Getting Started
 
-## Deploy on Vercel
+1. **Setup Environment Variables**
+   - Copy `.env.example` to `.env` in both directories
+   - Fill in your database credentials
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+2. **Setup Local Database (Cashier POS)**
+   ```bash
+   cd cashier-pos
+   bun run scripts/setup-local-db.ts
+   ```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+3. **Run Applications**
+   ```bash
+   # Terminal 1 - Alfamart POS
+   cd cashier-pos && bun dev
+
+   # Terminal 2 - Alfamart Admin Dashboard
+   cd admin-dashboard && bun dev
+   ```
+
+## Technologies
+
+- **Framework:** Next.js 16 + React 19
+- **Styling:** Tailwind CSS v4
+- **Components:** Radix UI + Shadcn/ui
+- **State:** Zustand
+- **Animations:** Framer Motion
+- **Database:** PostgreSQL, MySQL/TiDB, Supabase
+
+---
+
+© 2024 Alfamart Retail System
